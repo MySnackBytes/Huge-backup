@@ -1,0 +1,75 @@
+String mailAddress = 'manikandan.c@bakerhughes.com';
+Integer i=0;
+Integer X= i +100;
+Integer Count = 0;
+String query;
+String generatedCSVFile ='';
+String fileRow = 'S.No.,Label,ApiName,LastCreatedRecordDate,isPackageObject';
+generatedCSVFile = generatedCSVFile + fileRow + '\n';
+String fileName;
+Boolean isPackageObject;
+String objNameSpace;
+Set<String> nameSpacePrefixSet = new Set<String>();
+for(PackageLicense cls:[SELECT NamespacePrefix FROM PackageLicense]){
+	if(!nameSpacePrefixSet.contains(cls.NamespacePrefix))
+    nameSpacePrefixSet.add(cls.NamespacePrefix);
+} 
+i=i+1;
+fileName = 'Object Usage History List - ' + i + ' to ';
+for (Schema.SObjectType objectType : Schema.getGlobalDescribe().values()) {
+    If(i < X){
+        Schema.DescribeSObjectResult objectDescription = objectType.getDescribe();
+        if (!objectDescription.isCustom() || !objectDescription.isQueryable() || !objectDescription.getName().endsWith('__c')) continue;
+		objNameSpace = objectDescription.getName().substringBefore('_');
+				system.debug(objNameSpace);
+            if(nameSpacePrefixSet.contains(objNameSpace)){
+				system.debug(objNameSpace);
+				isPackageObject = true;
+			}else if(objectDescription.getName().startsWithIgnoreCase('sc_lightning__') || objectDescription.getName().startsWithIgnoreCase('mkto_si__') || objectDescription.getName().startsWithIgnoreCase('lcrm_scp')){
+				isPackageObject = true;
+			}else{
+				isPackageObject = false;
+			}
+		Count = Count + 1;
+		if(Count > = i){   //&& Count <= X){
+        String objectName = objectDescription.getName();
+        try{
+           
+			fileRow = '';
+			fileRow = fileRow +','+ Count +','+ objectDescription.getLabel() +','+ objectName +','+ isPackageObject;
+            system.debug(i +'-'+objectName );
+			If(!isPackageObject){
+				i=i+1;				 
+				query = 'SELECT CreatedDate FROM ' + objectName + ' ORDER BY CreatedDate DESC LIMIT 1';
+				List<sObject> objects = Database.query(query);
+				if(objects.Size() >0){
+					//system.debug(objectName +'-'+ objects[0].get('CreatedDate'));
+					fileRow = fileRow +','+ objects[0].get('CreatedDate');
+				}
+			}
+			fileRow = fileRow.replaceFirst(',','');
+            generatedCSVFile = generatedCSVFile + fileRow + '\n';
+        }
+        catch(Exception e){
+            system.debug(e);
+        }
+    }
+	}
+}
+Messaging.EmailFileAttachment csvAttachment = new Messaging.EmailFileAttachment();
+Blob csvBlob = blob.valueOf(generatedCSVFile);
+csvAttachment.setContentType('text/csv');
+csvAttachment.setFileName(fileName + Count + '.csv');
+csvAttachment.setBody(csvBlob);
+List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
+List<Messaging.EmailFileAttachment> attachmentList = new List<Messaging.EmailFileAttachment>();
+Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+String[] toAddresses = new String[]{mailAddress};
+    String subject =fileName + Count;
+email.setSubject(subject);
+email.setToAddresses(toAddresses);
+email.setPlainTextBody(fileName + Count);
+attachmentList.add(csvAttachment);
+email.setFileAttachments(attachmentList);
+emailList.add(email);
+Messaging.sendEmail(emailList);
